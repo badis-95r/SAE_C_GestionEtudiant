@@ -1,5 +1,19 @@
+/**
+ * @file SAE_C.c
+ * @brief SAE S1.01 - Gestion de la scolarité des étudiants de BUT.
+ *
+ * Programme de gestion des notes et du parcours scolaire des étudiants
+ * en Bachelor Universitaire de Technologie (BUT). Permet l'inscription,
+ * la saisie de notes, l'affichage du cursus, la gestion des jurys, etc.
+ *
+ * @author Keziah GEBAUER
+ * @author Badis RAHLI
+ * @version 1.0
+ * @date 13/11/2025
+ */
+
 // ============================================================================
-// SAE S1.01 - Gestion de la scolarit� des �tudiants de BUT
+// SAE S1.01 - Gestion de la scolarité des étudiants de BUT
 // ============================================================================
 
 #include <stdio.h>
@@ -12,48 +26,64 @@
 // CONSTANTES
 // ============================================================================
 
-// Limites du syst�me
+/**
+ * @brief Limites du système.
+ */
 enum {
-	MAX_ETUDIANTS = 100,
-	MAX_NOM = 30,
-	NB_SEMESTRES = 6,
-	NB_UE = 6,
-	NB_ANNEES = 3,
+	MAX_ETUDIANTS = 100, /**< Nombre maximum d'étudiants dans la promotion */
+	MAX_NOM = 30,        /**< Longueur maximale d'un nom ou prénom */
+	NB_SEMESTRES = 6,    /**< Nombre total de semestres en BUT */
+	NB_UE = 6,           /**< Nombre d'Unités d'Enseignement par semestre */
+	NB_ANNEES = 3,       /**< Nombre d'années du cursus */
 };
 
-// Seuils de validation
+/**
+ * @brief Seuils de validation et constantes pédagogiques.
+ */
 enum {
-	SEUIL_VALIDATION = 10,
-	SEUIL_BLOQUANT = 8,
-	MIN_RCUE_VALIDES = 4,
-	TOUTES_UE_VALIDEES = 6,
+	SEUIL_VALIDATION = 10,   /**< Note minimale pour valider une UE ou un semestre (10/20) */
+	SEUIL_BLOQUANT = 8,      /**< Note seuil en dessous de laquelle la compensation est impossible */
+	MIN_RCUE_VALIDES = 4,    /**< Nombre minimal d'UE validées (>10) pour valider une année */
+	TOUTES_UE_VALIDEES = 6,  /**< Nombre d'UE à valider pour certaines conditions (diplôme) */
 };
 
+/**
+ * @brief Valeur représentant une note non saisie.
+ */
 const float NOTE_INCONNUE = -1.0f;
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
+/**
+ * @brief Statut administratif d'un étudiant.
+ */
 typedef enum {
-	EN_COURS,
-	DEMISSION,
-	DEFAILLANCE,
-	AJOURNE,
-	DIPLOME,
+	EN_COURS,    /**< Étudiant en cours de formation */
+	DEMISSION,   /**< Étudiant démissionnaire */
+	DEFAILLANCE, /**< Étudiant défaillant (absences, etc.) */
+	AJOURNE,     /**< Étudiant ajourné (redoublement ou exclusion selon le contexte) */
+	DIPLOME,     /**< Étudiant ayant validé son diplôme */
 } t_statut;
 
+/**
+ * @brief Structure représentant un étudiant.
+ */
 typedef struct {
-	char prenom[MAX_NOM + 1];
-	char nom[MAX_NOM + 1];
-	float notes[NB_SEMESTRES][NB_UE];
-	int semestre_actuel;
-	t_statut statut;
+	char prenom[MAX_NOM + 1];        /**< Prénom de l'étudiant */
+	char nom[MAX_NOM + 1];           /**< Nom de l'étudiant */
+	float notes[NB_SEMESTRES][NB_UE];/**< Tableau des notes (semestre, UE) */
+	int semestre_actuel;             /**< Numéro du semestre actuel (1 à 6) */
+	t_statut statut;                 /**< Statut actuel de l'étudiant */
 } t_etudiant;
 
+/**
+ * @brief Structure représentant une promotion d'étudiants.
+ */
 typedef struct {
-	t_etudiant etudiants[MAX_ETUDIANTS];
-	int nb_inscrits;
+	t_etudiant etudiants[MAX_ETUDIANTS]; /**< Tableau des étudiants inscrits */
+	int nb_inscrits;                     /**< Nombre actuel d'étudiants inscrits */
 } t_promotion;
 
 // ============================================================================
@@ -91,6 +121,14 @@ void cmd_bilan(const t_promotion* promo);
 // MAIN
 // ============================================================================
 
+/**
+ * @brief Point d'entrée du programme.
+ *
+ * Boucle principale qui lit les commandes utilisateur et appelle les
+ * fonctions appropriées.
+ *
+ * @return 0 en cas de succès.
+ */
 int main() {
 	char cmd[MAX_NOM + 1];
 	t_promotion promo;
@@ -136,7 +174,14 @@ int main() {
 // INITIALISATION
 // ============================================================================
 
-// Initialise la promotion avec des valeurs par d�faut
+/**
+ * @brief Initialise la promotion avec des valeurs par défaut.
+ *
+ * Met à zéro le nombre d'inscrits et initialise toutes les notes à NOTE_INCONNUE.
+ * Initialise également le statut et le semestre des emplacements vides.
+ *
+ * @param promo Pointeur vers la structure de promotion à initialiser.
+ */
 void init_promotion(t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -158,7 +203,15 @@ void init_promotion(t_promotion* promo) {
 // ============================================================================
 
 // --- INSCRIRE ---
-// Inscrit un nouvel �tudiant (v�rifie les doublons)
+/**
+ * @brief Inscrit un nouvel étudiant dans la promotion.
+ *
+ * Lit le prénom et le nom depuis l'entrée standard.
+ * Vérifie si l'étudiant existe déjà (doublon).
+ * Si la promotion n'est pas pleine, ajoute l'étudiant.
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_inscrire(t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -168,7 +221,7 @@ void cmd_inscrire(t_promotion* promo) {
 
 	scanf("%s %s", prenom_saisi, nom_saisi);
 
-	// V�rifier si l'�tudiant existe d�j�
+	// Vérifier si l'étudiant existe déjà
 	for (int i = 0; i < promo->nb_inscrits; i++) {
 		if (strcmp(promo->etudiants[i].nom, nom_saisi) == 0 &&
 			strcmp(promo->etudiants[i].prenom, prenom_saisi) == 0) {
@@ -196,7 +249,15 @@ void cmd_inscrire(t_promotion* promo) {
 }
 
 // --- NOTE ---
-// Enregistre ou modifie la note d'un �tudiant
+/**
+ * @brief Enregistre ou modifie la note d'un étudiant.
+ *
+ * Lit l'ID étudiant, le numéro d'UE et la note.
+ * Effectue des vérifications (ID valide, étudiant en cours, UE valide, note valide).
+ * Enregistre la note pour le semestre actuel de l'étudiant.
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_note(t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -213,13 +274,13 @@ void cmd_note(t_promotion* promo) {
 
 	int idx = id_etu - 1;
 
-	// V�rifier que l'�tudiant est EN_COURS
+	// Vérifier que l'étudiant est EN_COURS
 	if (promo->etudiants[idx].statut != EN_COURS) {
 		printf("Etudiant hors formation\n");
 		return;
 	}
 
-	// Validation du num�ro d'UE
+	// Validation du numéro d'UE
 	if (num_ue < 1 || num_ue > NB_UE) {
 		printf("UE incorrecte\n");
 		return;
@@ -242,7 +303,16 @@ void cmd_note(t_promotion* promo) {
 
 // --- Fonctions de calcul ---
 
-// Calcule la moyenne annuelle (RCUE) pour une UE
+/**
+ * @brief Calcule la moyenne annuelle (RCUE) pour une UE.
+ *
+ * Moyenne des notes d'une même UE sur les deux semestres de l'année.
+ *
+ * @param etu Pointeur vers l'étudiant.
+ * @param annee Année concernée (1, 2 ou 3).
+ * @param num_ue Index de l'UE (0 à NB_UE-1).
+ * @return La moyenne sur 20, ou NOTE_INCONNUE si une des notes manque.
+ */
 float calculer_moyenne_annee(const t_etudiant* etu, int annee, int num_ue) {
 	assert(etu != NULL && annee >= 1 && annee <= 3 && num_ue >= 0 && num_ue < NB_UE);
 
@@ -261,7 +331,18 @@ float calculer_moyenne_annee(const t_etudiant* etu, int annee, int num_ue) {
 
 // --- Fonctions d'affichage ---
 
-// Affiche une moyenne avec son code de validation
+/**
+ * @brief Affiche une moyenne annuelle avec son code de validation.
+ *
+ * Codes affichés :
+ * - ADM : Admis (>= 10)
+ * - ADS : Admis par compensation Année Suivante (>= 10 année suivante)
+ * - AJB : Ajourné mais compensable (entre 8 et 10)
+ * - AJ  : Ajourné (< 8 ou pas de compensation)
+ *
+ * @param moy_annee Moyenne de l'année concernée.
+ * @param moy_suivante Moyenne de l'année suivante (pour compensation).
+ */
 void afficher_moyenne_avec_code(float moy_annee, float moy_suivante) {
 	if (moy_annee == NOTE_INCONNUE) {
 		printf("* (*)");
@@ -274,7 +355,7 @@ void afficher_moyenne_avec_code(float moy_annee, float moy_suivante) {
 		printf("%.1f (ADM)", moy_tronquee);
 	}
 	else if (moy_suivante != NOTE_INCONNUE && moy_suivante >= SEUIL_VALIDATION) {
-		printf("%.1f (ADS)", moy_tronquee);  // Compens� par ann�e suivante
+		printf("%.1f (ADS)", moy_tronquee);  // Compensé par année suivante
 	}
 	else if (moy_annee < SEUIL_BLOQUANT) {
 		printf("%.1f (AJB)", moy_tronquee);
@@ -284,7 +365,19 @@ void afficher_moyenne_avec_code(float moy_annee, float moy_suivante) {
 	}
 }
 
-// Affiche une note d'UE avec son code de validation
+/**
+ * @brief Affiche une note d'UE semestrielle avec son code de validation.
+ *
+ * Codes affichés :
+ * - ADM : Admis (>= 10)
+ * - ADC : Admis par compensation RCUE (Moyenne annuelle >= 10)
+ * - ADS : Admis par compensation Année Suivante (Moyenne année suivante >= 10)
+ * - AJ  : Ajourné
+ *
+ * @param note Note du semestre.
+ * @param moy_annee Moyenne annuelle correspondante (RCUE).
+ * @param moy_suivante Moyenne de l'année suivante.
+ */
 void afficher_note_avec_code(float note, float moy_annee, float moy_suivante) {
 	if (note == NOTE_INCONNUE) {
 		printf("* (*)");
@@ -300,14 +393,18 @@ void afficher_note_avec_code(float note, float moy_annee, float moy_suivante) {
 		printf("%.1f (ADC)", note_tronquee);  // Compensation par RCUE
 	}
 	else if (moy_suivante != NOTE_INCONNUE && moy_suivante >= SEUIL_VALIDATION) {
-		printf("%.1f (ADS)", note_tronquee);  // Compens� par ann�e suivante
+		printf("%.1f (ADS)", note_tronquee);  // Compensé par année suivante
 	}
 	else {
 		printf("%.1f (AJ)", note_tronquee);
 	}
 }
 
-// Affiche le texte du statut
+/**
+ * @brief Affiche la chaîne de caractères correspondant à un statut.
+ *
+ * @param statut Le statut à afficher.
+ */
 void afficher_statut(t_statut statut) {
 	switch (statut) {
 	case EN_COURS:    printf("en cours");    break;
@@ -320,7 +417,16 @@ void afficher_statut(t_statut statut) {
 }
 
 // --- CURSUS ---
-// Affiche le parcours complet d'un �tudiant
+/**
+ * @brief Affiche le parcours complet d'un étudiant.
+ *
+ * Affiche l'historique des semestres (S1 à S6) avec les notes,
+ * les moyennes annuelles (B1, B2, B3) et les statuts.
+ * Gère l'affichage des compensations (ADC, ADS) selon l'avancement
+ * dans le cursus et les décisions de jury.
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_cursus(const t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -345,12 +451,12 @@ void cmd_cursus(const t_promotion* promo) {
 		moy_b3[ue] = calculer_moyenne_annee(etu, 3, ue);
 	}
 
-	// D�terminer si les jurys ont eu lieu
+	// Déterminer si les jurys ont eu lieu
 	int jury_b1_fait = (etu->semestre_actuel > 2) || (etu->semestre_actuel == 2 && etu->statut == AJOURNE);
 	int jury_b2_fait = (etu->semestre_actuel > 4) || (etu->semestre_actuel == 4 && etu->statut == AJOURNE);
 	int jury_b3_fait = (etu->semestre_actuel == 6 && (etu->statut == DIPLOME || etu->statut == AJOURNE));
 
-	// === ANN�E 1 ===
+	// === ANNÉE 1 ===
 
 	// S1
 	if (etu->semestre_actuel >= 1) {
@@ -401,7 +507,7 @@ void cmd_cursus(const t_promotion* promo) {
 		printf("\n");
 	}
 
-	// === ANN�E 2 ===
+	// === ANNÉE 2 ===
 
 	// S3
 	if (etu->semestre_actuel >= 3) {
@@ -452,7 +558,7 @@ void cmd_cursus(const t_promotion* promo) {
 		printf("\n");
 	}
 
-	// === ANN�E 3 ===
+	// === ANNÉE 3 ===
 
 	// S5
 	if (etu->semestre_actuel >= 5) {
@@ -500,7 +606,13 @@ void cmd_cursus(const t_promotion* promo) {
 }
 
 // --- ETUDIANTS ---
-// Affiche la liste de tous les �tudiants
+/**
+ * @brief Affiche la liste de tous les étudiants de la promotion.
+ *
+ * Affiche l'ID, le nom, le prénom, le semestre actuel et le statut.
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_etudiants(const t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -519,7 +631,15 @@ void cmd_etudiants(const t_promotion* promo) {
 // ============================================================================
 
 // --- DEMISSION / DEFAILLANCE ---
-// Change le statut d'un �tudiant
+/**
+ * @brief Change le statut d'un étudiant (Démission ou Défaillance).
+ *
+ * Vérifie l'ID et si l'étudiant est EN_COURS.
+ * Modifie le statut selon le paramètre nouveau_statut.
+ *
+ * @param promo Pointeur vers la promotion.
+ * @param nouveau_statut Nouveau statut à appliquer (DEMISSION ou DEFAILLANCE).
+ */
 void cmd_changer_statut(t_promotion* promo, t_statut nouveau_statut) {
 	assert(promo != NULL);
 
@@ -550,7 +670,16 @@ void cmd_changer_statut(t_promotion* promo, t_statut nouveau_statut) {
 
 // --- Fonctions auxiliaires pour JURY ---
 
-// V�rifie si des notes sont manquantes
+/**
+ * @brief Vérifie si toutes les notes sont saisies pour un semestre donné.
+ *
+ * Pour les jurys pairs (fin d'année), vérifie les deux semestres de l'année.
+ * Pour les jurys impairs, vérifie uniquement le semestre courant.
+ *
+ * @param promo Pointeur vers la promotion.
+ * @param num_sem Numéro du semestre à vérifier.
+ * @return 1 si des notes sont manquantes, 0 sinon.
+ */
 int verif_notes_completes(const t_promotion* promo, int num_sem) {
 	assert(promo != NULL);
 
@@ -562,7 +691,7 @@ int verif_notes_completes(const t_promotion* promo, int num_sem) {
 			continue;
 		}
 
-		// Pour jury pair, v�rifier toute l'ann�e
+		// Pour jury pair, vérifier toute l'année
 		int debut = (num_sem % 2 == 0) ? idx_sem - 1 : idx_sem;
 
 		for (int sem = debut; sem <= idx_sem; sem++) {
@@ -577,7 +706,13 @@ int verif_notes_completes(const t_promotion* promo, int num_sem) {
 	return 0;
 }
 
-// Fait passer les �tudiants au semestre suivant (jury impair)
+/**
+ * @brief Fait passer les étudiants au semestre suivant (pour les jurys impairs).
+ *
+ * @param promo Pointeur vers la promotion.
+ * @param num_sem Numéro du semestre actuel.
+ * @param compteur Pointeur vers un compteur incrémenté pour chaque étudiant traité.
+ */
 void passer_semestre_suivant(t_promotion* promo, int num_sem, int* compteur) {
 	assert(promo != NULL && compteur != NULL);
 
@@ -592,7 +727,15 @@ void passer_semestre_suivant(t_promotion* promo, int num_sem, int* compteur) {
 }
 
 // --- JURY ---
-// G�re les jurys de fin de semestre
+/**
+ * @brief Gère les jurys de fin de semestre.
+ *
+ * Vérifie que toutes les notes sont présentes.
+ * Si semestre impair : passage automatique au suivant.
+ * Si semestre pair : appel des fonctions de jury de fin d'année spécifiques (S2, S4, S6).
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_jury(t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -616,7 +759,7 @@ void cmd_jury(t_promotion* promo) {
 		passer_semestre_suivant(promo, num_sem, &nb_etu_traites);
 	}
 	else {
-		// SEMESTRES PAIRS : Application des r�gles
+		// SEMESTRES PAIRS : Application des règles
 		for (int i = 0; i < promo->nb_inscrits; i++) {
 			if (promo->etudiants[i].statut == EN_COURS &&
 				promo->etudiants[i].semestre_actuel == num_sem) {
@@ -643,8 +786,16 @@ void cmd_jury(t_promotion* promo) {
 // SPRINT 3 - JURY (semestres pairs)
 // ============================================================================
 
-// --- JURY ANN�E 1 (S2) ---
-// R�gles : >= 4 RCUE valid�s ET aucun RCUE < 8
+// --- JURY ANNÉE 1 (S2) ---
+/**
+ * @brief Applique les règles de passage de la première à la deuxième année.
+ *
+ * Règles :
+ * - Avoir validé au moins MIN_RCUE_VALIDES (4) UE (moyenne annuelle >= 10).
+ * - Ne pas avoir de moyenne annuelle inférieure à SEUIL_BLOQUANT (8).
+ *
+ * @param etu Pointeur vers l'étudiant.
+ */
 void jury_fin_annee1(t_etudiant* etu) {
 	assert(etu != NULL);
 
@@ -671,9 +822,17 @@ void jury_fin_annee1(t_etudiant* etu) {
 	}
 }
 
-// --- JURY ANN�E 2 (S4) ---
-// R�gles : >= 4 RCUE de B2 valid�s ET aucun RCUE de B2 < 8
-//          ET toutes les UE de B1 valid�es
+// --- JURY ANNÉE 2 (S4) ---
+/**
+ * @brief Applique les règles de passage de la deuxième à la troisième année.
+ *
+ * Règles :
+ * - Avoir validé au moins MIN_RCUE_VALIDES (4) UE de B2 (moyenne annuelle >= 10).
+ * - Ne pas avoir de moyenne annuelle de B2 inférieure à SEUIL_BLOQUANT (8).
+ * - Avoir validé TOUTES les UE de B1 (si pas validé en S2, doit l'être en S4).
+ *
+ * @param etu Pointeur vers l'étudiant.
+ */
 void jury_fin_annee2(t_etudiant* etu) {
 	assert(etu != NULL);
 
@@ -686,7 +845,7 @@ void jury_fin_annee2(t_etudiant* etu) {
 		moy_b1[ue] = calculer_moyenne_annee(etu, 1, ue);
 		moy_b2[ue] = calculer_moyenne_annee(etu, 2, ue);
 
-		// V�rifier les conditions pour B2
+		// Vérifier les conditions pour B2
 		if (moy_b2[ue] >= SEUIL_VALIDATION) {
 			nb_valides_b2++;
 		}
@@ -694,7 +853,7 @@ void jury_fin_annee2(t_etudiant* etu) {
 			a_rcue_bloquant = 1;
 		}
 
-		// V�rifier que toutes les UE de B1 sont valid�es
+		// Vérifier que toutes les UE de B1 sont validées
 		if (moy_b1[ue] < SEUIL_VALIDATION && moy_b2[ue] < SEUIL_VALIDATION) {
 			toutes_ue_b1_ok = 0;
 		}
@@ -710,9 +869,16 @@ void jury_fin_annee2(t_etudiant* etu) {
 	}
 }
 
-// --- JURY ANN�E 3 (S6) - DIPL�ME ---
-// R�gles : TOUS les RCUE de B3 valid�s
-//          ET toutes les UE de B2 valid�es
+// --- JURY ANNÉE 3 (S6) - DIPLÔME ---
+/**
+ * @brief Applique les règles de délivrance du diplôme en fin de 3ème année.
+ *
+ * Règles :
+ * - Avoir validé TOUTES les UE de B3 (TOUTES_UE_VALIDEES = 6).
+ * - Avoir validé TOUTES les UE de B2.
+ *
+ * @param etu Pointeur vers l'étudiant.
+ */
 void jury_fin_annee3(t_etudiant* etu) {
 	assert(etu != NULL);
 
@@ -728,13 +894,13 @@ void jury_fin_annee3(t_etudiant* etu) {
 			nb_valides_b3++;
 		}
 
-		// V�rifier que toutes les UE de B2 sont valid�es
+		// Vérifier que toutes les UE de B2 sont validées
 		if (moy_b2[ue] < SEUIL_VALIDATION && moy_b3[ue] < SEUIL_VALIDATION) {
 			toutes_ue_b2_ok = 0;
 		}
 	}
 
-	// Pour le dipl�me : TOUTES les UE de B3 valid�es
+	// Pour le diplôme : TOUTES les UE de B3 validées
 	if (nb_valides_b3 == TOUTES_UE_VALIDEES && toutes_ue_b2_ok == 1) {
 		etu->statut = DIPLOME;
 	}
@@ -748,7 +914,18 @@ void jury_fin_annee3(t_etudiant* etu) {
 // ============================================================================
 
 // --- BILAN ---
-// Affiche le nombre d'�tudiants par statut pour une ann�e
+/**
+ * @brief Affiche le bilan d'une année spécifique.
+ *
+ * Comptabilise pour une année donnée (1, 2 ou 3) :
+ * - Le nombre de démissions.
+ * - Le nombre de défaillances.
+ * - Le nombre d'étudiants en cours.
+ * - Le nombre d'ajournés.
+ * - Le nombre d'étudiants ayant réussi (passés à l'année sup ou diplômés).
+ *
+ * @param promo Pointeur vers la promotion.
+ */
 void cmd_bilan(const t_promotion* promo) {
 	assert(promo != NULL);
 
@@ -772,12 +949,12 @@ void cmd_bilan(const t_promotion* promo) {
 	for (int i = 0; i < promo->nb_inscrits; i++) {
 		const t_etudiant* etu = &promo->etudiants[i];
 
-		// Ignorer les �tudiants qui n'ont pas atteint cette ann�e
+		// Ignorer les étudiants qui n'ont pas atteint cette année
 		if (etu->semestre_actuel < sem_debut) {
 			continue;
 		}
 
-		// CAS 1 : �tudiant au semestre impair de l'ann�e
+		// CAS 1 : étudiant au semestre impair de l'année
 		if (etu->semestre_actuel == sem_debut) {
 			if (etu->statut == DEMISSION) {
 				nb_dem++;
@@ -789,7 +966,7 @@ void cmd_bilan(const t_promotion* promo) {
 				nb_cours++;
 			}
 		}
-		// CAS 2 : �tudiant au semestre pair de l'ann�e
+		// CAS 2 : étudiant au semestre pair de l'année
 		else if (etu->semestre_actuel == sem_fin) {
 			if (etu->statut == DEMISSION) {
 				nb_dem++;
@@ -803,12 +980,12 @@ void cmd_bilan(const t_promotion* promo) {
 			else if (etu->statut == AJOURNE) {
 				nb_aj++;
 			}
-			// CAS PARTICULIER : Les dipl�m�s restent en S6
+			// CAS PARTICULIER : Les diplômés restent en S6
 			else if (etu->statut == DIPLOME && annee == 3) {
 				nb_reussi++;
 			}
 		}
-		// CAS 3 : �tudiant ayant d�pass� cette ann�e
+		// CAS 3 : étudiant ayant dépassé cette année
 		else if (etu->semestre_actuel > sem_fin) {
 			nb_reussi++;
 		}
