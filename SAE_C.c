@@ -41,16 +41,14 @@ enum {
  * @brief Seuils de validation et constantes pédagogiques.
  */
 enum {
-	SEUIL_VALIDATION = 10,   /**< Note minimale pour valider une UE ou un semestre (10/20) */
-	SEUIL_BLOQUANT = 8,      /**< Note seuil en dessous de laquelle la compensation est impossible */
 	MIN_RCUE_VALIDES = 4,    /**< Nombre minimal d'UE validées (>10) pour valider une année */
 	TOUTES_UE_VALIDEES = 6,  /**< Nombre d'UE à valider pour certaines conditions (diplôme) */
 };
 
-/**
- * @brief Valeur représentant une note non saisie.
- */
-const float NOTE_INCONNUE = -1.0f;
+const float SEUIL_VALIDATION = 10.0f; /**< Note minimale pour valider une UE ou un semestre (10/20) */
+const float SEUIL_BLOQUANT = 8.0f;    /**< Note seuil en dessous de laquelle la compensation est impossible */
+const float NOTE_INCONNUE = -1.0f;    /**< Valeur représentant une note non saisie */
+const float MAX_NOTE = 20.0f;         /**< Note maximale possible */
 
 // ============================================================================
 // TYPES
@@ -106,13 +104,11 @@ void afficher_statut(t_statut statut);
 // Sprint 2
 void cmd_changer_statut(t_promotion* promo, t_statut nouveau_statut);
 void cmd_jury(t_promotion* promo);
-int verif_notes_completes(const t_promotion* promo, int num_sem);
-void passer_semestre_suivant(t_promotion* promo, int num_sem, int* compteur);
+int verif_notes_incompletes(const t_promotion* promo, int num_sem);
+int passer_semestre_suivant(t_promotion* promo, int num_sem);
 
 // Sprint 3
-void jury_fin_annee1(t_etudiant* etu);
-void jury_fin_annee2(t_etudiant* etu);
-void jury_fin_annee3(t_etudiant* etu);
+void jury_fin_annee(t_etudiant* etu, int annee);
 
 // Sprint 4
 void cmd_bilan(const t_promotion* promo);
@@ -287,7 +283,7 @@ void cmd_note(t_promotion* promo) {
 	}
 
 	// Validation de la note
-	if (note < 0.0f || note > 20.0f) {
+	if (note < 0.0f || note > MAX_NOTE) {
 		printf("Note incorrecte\n");
 		return;
 	}
@@ -444,164 +440,91 @@ void cmd_cursus(const t_promotion* promo) {
 	printf("%d %s %s\n", id_etu, etu->prenom, etu->nom);
 
 	// Calculer toutes les moyennes annuelles
-	float moy_b1[NB_UE], moy_b2[NB_UE], moy_b3[NB_UE];
-	for (int ue = 0; ue < NB_UE; ue++) {
-		moy_b1[ue] = calculer_moyenne_annee(etu, 1, ue);
-		moy_b2[ue] = calculer_moyenne_annee(etu, 2, ue);
-		moy_b3[ue] = calculer_moyenne_annee(etu, 3, ue);
+	float moyennes_annee[NB_ANNEES][NB_UE];
+	int jury_fait[NB_ANNEES];
+
+	for (int an = 0; an < NB_ANNEES; an++) {
+		int annee = an + 1;
+		for (int ue = 0; ue < NB_UE; ue++) {
+			moyennes_annee[an][ue] = calculer_moyenne_annee(etu, annee, ue);
+		}
+
+		// Déterminer si le jury de l'année 'annee' a été fait
+		// Conditions approximatives basées sur l'avancement dans les semestres
+		int sem_fin_annee = annee * 2;
+		jury_fait[an] = (etu->semestre_actuel > sem_fin_annee) ||
+			(etu->semestre_actuel == sem_fin_annee && etu->statut != EN_COURS);
 	}
 
-	// Déterminer si les jurys ont eu lieu
-	int jury_b1_fait = (etu->semestre_actuel > 2) || (etu->semestre_actuel == 2 && etu->statut == AJOURNE);
-	int jury_b2_fait = (etu->semestre_actuel > 4) || (etu->semestre_actuel == 4 && etu->statut == AJOURNE);
-	int jury_b3_fait = (etu->semestre_actuel == 6 && (etu->statut == DIPLOME || etu->statut == AJOURNE));
+	// Boucle sur les années
+	for (int an = 0; an < NB_ANNEES; an++) {
+		int annee = an + 1;
+		int sem_impair = (annee - 1) * 2 + 1;
+		int sem_pair = annee * 2;
 
-	// === ANNÉE 1 ===
+		// Semestre impair (S1, S3, S5...)
+		if (etu->semestre_actuel >= sem_impair) {
+			printf("S%d", sem_impair);
+			for (int ue = 0; ue < NB_UE; ue++) {
+				printf(" - ");
+				float moy_compens = jury_fait[an] ? moyennes_annee[an][ue] : NOTE_INCONNUE;
+				float moy_suiv = (an < NB_ANNEES - 1 && jury_fait[an + 1]) ? moyennes_annee[an + 1][ue] : NOTE_INCONNUE;
+				
+				// Pour S5 (dernière année), pas de compensation année suivante
+				if (annee == NB_ANNEES) moy_suiv = NOTE_INCONNUE;
 
-	// S1
-	if (etu->semestre_actuel >= 1) {
-		printf("S1");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b1_fait ? moy_b1[ue] : NOTE_INCONNUE;
-			float moy_suiv = jury_b2_fait ? moy_b2[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[0][ue], moy_compens, moy_suiv);
+				afficher_note_avec_code(etu->notes[sem_impair - 1][ue], moy_compens, moy_suiv);
+			}
+			printf(" -");
+			if (etu->semestre_actuel == sem_impair) {
+				printf(" ");
+				afficher_statut(etu->statut);
+			}
+			printf("\n");
 		}
-		printf(" -");
-		if (etu->semestre_actuel == 1) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
 
-	// S2
-	if (etu->semestre_actuel >= 2) {
-		printf("S2");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b1_fait ? moy_b1[ue] : NOTE_INCONNUE;
-			float moy_suiv = jury_b2_fait ? moy_b2[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[1][ue], moy_compens, moy_suiv);
-		}
-		printf(" -");
-		if (etu->semestre_actuel == 2 && etu->statut != AJOURNE) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
+		// Semestre pair (S2, S4, S6...)
+		if (etu->semestre_actuel >= sem_pair) {
+			printf("S%d", sem_pair);
+			for (int ue = 0; ue < NB_UE; ue++) {
+				printf(" - ");
+				float moy_compens = jury_fait[an] ? moyennes_annee[an][ue] : NOTE_INCONNUE;
+				float moy_suiv = (an < NB_ANNEES - 1 && jury_fait[an + 1]) ? moyennes_annee[an + 1][ue] : NOTE_INCONNUE;
 
-	// B1
-	if (etu->semestre_actuel > 2 || (etu->semestre_actuel == 2 && etu->statut == AJOURNE)) {
-		printf("B1");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_suiv = jury_b2_fait ? moy_b2[ue] : NOTE_INCONNUE;
-			afficher_moyenne_avec_code(moy_b1[ue], moy_suiv);
-		}
-		printf(" -");
-		if (etu->semestre_actuel == 2 && etu->statut == AJOURNE) {
-			printf(" ajourne");
-		}
-		printf("\n");
-	}
+				// Pour S6, pas de compensation année suivante
+				if (annee == NB_ANNEES) moy_suiv = NOTE_INCONNUE;
 
-	// === ANNÉE 2 ===
+				afficher_note_avec_code(etu->notes[sem_pair - 1][ue], moy_compens, moy_suiv);
+			}
+			printf(" -");
+			if (etu->semestre_actuel == sem_pair && etu->statut != AJOURNE && etu->statut != DIPLOME) {
+				printf(" ");
+				afficher_statut(etu->statut);
+			}
+			printf("\n");
+		}
 
-	// S3
-	if (etu->semestre_actuel >= 3) {
-		printf("S3");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b2_fait ? moy_b2[ue] : NOTE_INCONNUE;
-			float moy_suiv = jury_b3_fait ? moy_b3[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[2][ue], moy_compens, moy_suiv);
-		}
-		printf(" -");
-		if (etu->semestre_actuel == 3) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
+		// Bilan Annuel (B1, B2, B3...)
+		if (jury_fait[an] || (etu->semestre_actuel == sem_pair && etu->statut == AJOURNE)) {
+			printf("B%d", annee);
+			for (int ue = 0; ue < NB_UE; ue++) {
+				printf(" - ");
+				float moy_suiv = (an < NB_ANNEES - 1 && jury_fait[an + 1]) ? moyennes_annee[an + 1][ue] : NOTE_INCONNUE;
+				
+				// Pour B3, pas de compensation suivante
+				if (annee == NB_ANNEES) moy_suiv = NOTE_INCONNUE;
 
-	// S4
-	if (etu->semestre_actuel >= 4) {
-		printf("S4");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b2_fait ? moy_b2[ue] : NOTE_INCONNUE;
-			float moy_suiv = jury_b3_fait ? moy_b3[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[3][ue], moy_compens, moy_suiv);
+				afficher_moyenne_avec_code(moyennes_annee[an][ue], moy_suiv);
+			}
+			printf(" -");
+			if (etu->semestre_actuel == sem_pair && etu->statut == AJOURNE) {
+				printf(" ajourne");
+			} else if (annee == NB_ANNEES && etu->statut == DIPLOME) {
+				printf(" ");
+				afficher_statut(etu->statut);
+			}
+			printf("\n");
 		}
-		printf(" -");
-		if (etu->semestre_actuel == 4 && etu->statut != AJOURNE) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
-
-	// B2
-	if (etu->semestre_actuel > 4 || (etu->semestre_actuel == 4 && etu->statut == AJOURNE)) {
-		printf("B2");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_suiv = jury_b3_fait ? moy_b3[ue] : NOTE_INCONNUE;
-			afficher_moyenne_avec_code(moy_b2[ue], moy_suiv);
-		}
-		printf(" -");
-		if (etu->semestre_actuel == 4 && etu->statut == AJOURNE) {
-			printf(" ajourne");
-		}
-		printf("\n");
-	}
-
-	// === ANNÉE 3 ===
-
-	// S5
-	if (etu->semestre_actuel >= 5) {
-		printf("S5");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b3_fait ? moy_b3[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[4][ue], moy_compens, NOTE_INCONNUE);
-		}
-		printf(" -");
-		if (etu->semestre_actuel == 5) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
-
-	// S6
-	if (etu->semestre_actuel >= 6) {
-		printf("S6");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			float moy_compens = jury_b3_fait ? moy_b3[ue] : NOTE_INCONNUE;
-			afficher_note_avec_code(etu->notes[5][ue], moy_compens, NOTE_INCONNUE);
-		}
-		printf(" -");
-		if (etu->statut != DIPLOME && etu->statut != AJOURNE) {
-			printf(" ");
-			afficher_statut(etu->statut);
-		}
-		printf("\n");
-	}
-
-	// B3
-	if (etu->statut == DIPLOME || (etu->semestre_actuel == 6 && etu->statut == AJOURNE)) {
-		printf("B3");
-		for (int ue = 0; ue < NB_UE; ue++) {
-			printf(" - ");
-			afficher_moyenne_avec_code(moy_b3[ue], NOTE_INCONNUE);
-		}
-		printf(" - ");
-		afficher_statut(etu->statut);
-		printf("\n");
 	}
 }
 
@@ -673,14 +596,15 @@ void cmd_changer_statut(t_promotion* promo, t_statut nouveau_statut) {
 /**
  * @brief Vérifie si toutes les notes sont saisies pour un semestre donné.
  *
- * Pour les jurys pairs (fin d'année), vérifie les deux semestres de l'année.
+ * Pour les jurys pairs (fin d'année), on vérifie le semestre pair courant.
+ * (Il est impossible d'être en semestre pair sans avoir validé le précédent).
  * Pour les jurys impairs, vérifie uniquement le semestre courant.
  *
  * @param promo Pointeur vers la promotion.
  * @param num_sem Numéro du semestre à vérifier.
  * @return 1 si des notes sont manquantes, 0 sinon.
  */
-int verif_notes_completes(const t_promotion* promo, int num_sem) {
+int verif_notes_incompletes(const t_promotion* promo, int num_sem) {
 	assert(promo != NULL);
 
 	int idx_sem = num_sem - 1;
@@ -691,14 +615,9 @@ int verif_notes_completes(const t_promotion* promo, int num_sem) {
 			continue;
 		}
 
-		// Pour jury pair, vérifier toute l'année
-		int debut = (num_sem % 2 == 0) ? idx_sem - 1 : idx_sem;
-
-		for (int sem = debut; sem <= idx_sem; sem++) {
-			for (int ue = 0; ue < NB_UE; ue++) {
-				if (promo->etudiants[i].notes[sem][ue] == NOTE_INCONNUE) {
-					return 1;
-				}
+		for (int ue = 0; ue < NB_UE; ue++) {
+			if (promo->etudiants[i].notes[idx_sem][ue] == NOTE_INCONNUE) {
+				return 1;
 			}
 		}
 	}
@@ -711,19 +630,26 @@ int verif_notes_completes(const t_promotion* promo, int num_sem) {
  *
  * @param promo Pointeur vers la promotion.
  * @param num_sem Numéro du semestre actuel.
- * @param compteur Pointeur vers un compteur incrémenté pour chaque étudiant traité.
+ * @return Le nombre d'étudiants ayant changé de semestre.
  */
-void passer_semestre_suivant(t_promotion* promo, int num_sem, int* compteur) {
-	assert(promo != NULL && compteur != NULL);
+int passer_semestre_suivant(t_promotion* promo, int num_sem) {
+	assert(promo != NULL);
 
+	// Vérifie que le semestre est bien impair
+	if (num_sem % 2 == 0) {
+		return 0;
+	}
+
+	int compteur = 0;
 	for (int i = 0; i < promo->nb_inscrits; i++) {
 		if (promo->etudiants[i].statut == EN_COURS &&
 			promo->etudiants[i].semestre_actuel == num_sem) {
 
 			promo->etudiants[i].semestre_actuel++;
-			(*compteur)++;
+			compteur++;
 		}
 	}
+	return compteur;
 }
 
 // --- JURY ---
@@ -732,7 +658,7 @@ void passer_semestre_suivant(t_promotion* promo, int num_sem, int* compteur) {
  *
  * Vérifie que toutes les notes sont présentes.
  * Si semestre impair : passage automatique au suivant.
- * Si semestre pair : appel des fonctions de jury de fin d'année spécifiques (S2, S4, S6).
+ * Si semestre pair : appel de la fonction générique jury_fin_annee.
  *
  * @param promo Pointeur vers la promotion.
  */
@@ -747,7 +673,7 @@ void cmd_jury(t_promotion* promo) {
 		return;
 	}
 
-	if (verif_notes_completes(promo, num_sem)) {
+	if (verif_notes_incompletes(promo, num_sem)) {
 		printf("Des notes sont manquantes\n");
 		return;
 	}
@@ -756,7 +682,7 @@ void cmd_jury(t_promotion* promo) {
 
 	if (num_sem % 2 != 0) {
 		// SEMESTRES IMPAIRS : Passage automatique
-		passer_semestre_suivant(promo, num_sem, &nb_etu_traites);
+		nb_etu_traites = passer_semestre_suivant(promo, num_sem);
 	}
 	else {
 		// SEMESTRES PAIRS : Application des règles
@@ -765,16 +691,7 @@ void cmd_jury(t_promotion* promo) {
 				promo->etudiants[i].semestre_actuel == num_sem) {
 
 				nb_etu_traites++;
-
-				if (num_sem == 2) {
-					jury_fin_annee1(&promo->etudiants[i]);
-				}
-				else if (num_sem == 4) {
-					jury_fin_annee2(&promo->etudiants[i]);
-				}
-				else if (num_sem == 6) {
-					jury_fin_annee3(&promo->etudiants[i]);
-				}
+				jury_fin_annee(&promo->etudiants[i], num_sem / 2);
 			}
 		}
 	}
@@ -786,123 +703,88 @@ void cmd_jury(t_promotion* promo) {
 // SPRINT 3 - JURY (semestres pairs)
 // ============================================================================
 
-// --- JURY ANNÉE 1 (S2) ---
 /**
- * @brief Applique les règles de passage de la première à la deuxième année.
+ * @brief Applique les règles de validation d'une année.
  *
- * Règles :
- * - Avoir validé au moins MIN_RCUE_VALIDES (4) UE (moyenne annuelle >= 10).
- * - Ne pas avoir de moyenne annuelle inférieure à SEUIL_BLOQUANT (8).
+ * Cette fonction générique gère tous les jurys de fin d'année (1, 2, 3...).
+ *
+ * Règles générales :
+ * 1. Pour l'année courante :
+ *    - Années intermédiaires : Avoir validé au moins MIN_RCUE_VALIDES UE et aucun blocage.
+ *    - Année finale : Avoir validé TOUTES_UE_VALIDEES UE.
+ * 2. Pour les années précédentes (si annee > 1) :
+ *    - Avoir validé toutes les UE de l'année précédente (via compensation si nécessaire).
  *
  * @param etu Pointeur vers l'étudiant.
+ * @param annee Année à valider (1, 2, 3...).
  */
-void jury_fin_annee1(t_etudiant* etu) {
-	assert(etu != NULL);
+void jury_fin_annee(t_etudiant* etu, int annee) {
+	assert(etu != NULL && annee >= 1 && annee <= NB_ANNEES);
 
-	float moy_b1[NB_UE];
+	float moy_annee[NB_UE];
+	float moy_prec[NB_UE]; // Pour stocker les moyennes de l'année précédente si besoin
+
 	int nb_valides = 0;
 	int a_rcue_bloquant = 0;
+	int annees_prec_ok = 1;
 
+	// Vérification de l'année précédente (si elle existe)
+	if (annee > 1) {
+		for (int ue = 0; ue < NB_UE; ue++) {
+			moy_prec[ue] = calculer_moyenne_annee(etu, annee - 1, ue);
+			moy_annee[ue] = calculer_moyenne_annee(etu, annee, ue); // On en a besoin pour vérifier la compensation
+
+			// L'UE de l'année précédente est validée si :
+			// - Sa moyenne est >= SEUIL_VALIDATION
+			// - OU si elle est compensée par l'UE correspondante de l'année courante (moy_annee >= SEUIL_VALIDATION)
+			// Note: Dans le code original jury_fin_annee2/3, la condition était :
+			// if (moy_b1[ue] < 10 && moy_b2[ue] < 10) alors KO.
+			// Ce qui revient à dire : OK si moy_b1 >= 10 OU moy_b2 >= 10.
+			if (moy_prec[ue] < SEUIL_VALIDATION && moy_annee[ue] < SEUIL_VALIDATION) {
+				annees_prec_ok = 0;
+			}
+		}
+	}
+	else {
+		// Pour la première année, il suffit de calculer ses moyennes
+		for (int ue = 0; ue < NB_UE; ue++) {
+			moy_annee[ue] = calculer_moyenne_annee(etu, annee, ue);
+		}
+	}
+
+	// Analyse de l'année courante
 	for (int ue = 0; ue < NB_UE; ue++) {
-		moy_b1[ue] = calculer_moyenne_annee(etu, 1, ue);
-
-		if (moy_b1[ue] >= SEUIL_VALIDATION) {
+		if (moy_annee[ue] >= SEUIL_VALIDATION) {
 			nb_valides++;
 		}
-		if (moy_b1[ue] < SEUIL_BLOQUANT) {
+		if (moy_annee[ue] < SEUIL_BLOQUANT) {
 			a_rcue_bloquant = 1;
 		}
 	}
 
-	if (nb_valides >= MIN_RCUE_VALIDES && a_rcue_bloquant == 0) {
-		etu->semestre_actuel = 3;
+	// Application de la décision
+	int admis = 0;
+
+	if (annee < NB_ANNEES) {
+		// Année intermédiaire : Passage si conditions respectées
+		if (nb_valides >= MIN_RCUE_VALIDES && a_rcue_bloquant == 0 && annees_prec_ok) {
+			admis = 1;
+		}
 	}
 	else {
-		etu->statut = AJOURNE;
-	}
-}
-
-// --- JURY ANNÉE 2 (S4) ---
-/**
- * @brief Applique les règles de passage de la deuxième à la troisième année.
- *
- * Règles :
- * - Avoir validé au moins MIN_RCUE_VALIDES (4) UE de B2 (moyenne annuelle >= 10).
- * - Ne pas avoir de moyenne annuelle de B2 inférieure à SEUIL_BLOQUANT (8).
- * - Avoir validé TOUTES les UE de B1 (si pas validé en S2, doit l'être en S4).
- *
- * @param etu Pointeur vers l'étudiant.
- */
-void jury_fin_annee2(t_etudiant* etu) {
-	assert(etu != NULL);
-
-	float moy_b1[NB_UE], moy_b2[NB_UE];
-	int nb_valides_b2 = 0;
-	int a_rcue_bloquant = 0;
-	int toutes_ue_b1_ok = 1;
-
-	for (int ue = 0; ue < NB_UE; ue++) {
-		moy_b1[ue] = calculer_moyenne_annee(etu, 1, ue);
-		moy_b2[ue] = calculer_moyenne_annee(etu, 2, ue);
-
-		// Vérifier les conditions pour B2
-		if (moy_b2[ue] >= SEUIL_VALIDATION) {
-			nb_valides_b2++;
-		}
-		if (moy_b2[ue] < SEUIL_BLOQUANT) {
-			a_rcue_bloquant = 1;
-		}
-
-		// Vérifier que toutes les UE de B1 sont validées
-		if (moy_b1[ue] < SEUIL_VALIDATION && moy_b2[ue] < SEUIL_VALIDATION) {
-			toutes_ue_b1_ok = 0;
+		// Année finale (Diplôme) : Toutes les UE doivent être validées
+		if (nb_valides == TOUTES_UE_VALIDEES && annees_prec_ok) {
+			admis = 1;
 		}
 	}
 
-	if (nb_valides_b2 >= MIN_RCUE_VALIDES &&
-		a_rcue_bloquant == 0 &&
-		toutes_ue_b1_ok == 1) {
-		etu->semestre_actuel = 5;
-	}
-	else {
-		etu->statut = AJOURNE;
-	}
-}
-
-// --- JURY ANNÉE 3 (S6) - DIPLÔME ---
-/**
- * @brief Applique les règles de délivrance du diplôme en fin de 3ème année.
- *
- * Règles :
- * - Avoir validé TOUTES les UE de B3 (TOUTES_UE_VALIDEES = 6).
- * - Avoir validé TOUTES les UE de B2.
- *
- * @param etu Pointeur vers l'étudiant.
- */
-void jury_fin_annee3(t_etudiant* etu) {
-	assert(etu != NULL);
-
-	float moy_b2[NB_UE], moy_b3[NB_UE];
-	int nb_valides_b3 = 0;
-	int toutes_ue_b2_ok = 1;
-
-	for (int ue = 0; ue < NB_UE; ue++) {
-		moy_b2[ue] = calculer_moyenne_annee(etu, 2, ue);
-		moy_b3[ue] = calculer_moyenne_annee(etu, 3, ue);
-
-		if (moy_b3[ue] >= SEUIL_VALIDATION) {
-			nb_valides_b3++;
+	if (admis) {
+		if (annee < NB_ANNEES) {
+			etu->semestre_actuel++; // Passage au S3, S5...
 		}
-
-		// Vérifier que toutes les UE de B2 sont validées
-		if (moy_b2[ue] < SEUIL_VALIDATION && moy_b3[ue] < SEUIL_VALIDATION) {
-			toutes_ue_b2_ok = 0;
+		else {
+			etu->statut = DIPLOME;
 		}
-	}
-
-	// Pour le diplôme : TOUTES les UE de B3 validées
-	if (nb_valides_b3 == TOUTES_UE_VALIDEES && toutes_ue_b2_ok == 1) {
-		etu->statut = DIPLOME;
 	}
 	else {
 		etu->statut = AJOURNE;
@@ -981,7 +863,7 @@ void cmd_bilan(const t_promotion* promo) {
 				nb_aj++;
 			}
 			// CAS PARTICULIER : Les diplômés restent en S6
-			else if (etu->statut == DIPLOME && annee == 3) {
+			else if (etu->statut == DIPLOME && annee == NB_ANNEES) {
 				nb_reussi++;
 			}
 		}
